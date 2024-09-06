@@ -1,12 +1,15 @@
 mod config;
 mod error;
+mod server;
 
 use clap::Parser;
 use config::ClapArgConfig;
 use error::ServerError;
 use log::*;
+use server::Server;
 
-fn main() -> Result<(), ServerError> {
+#[tokio::main]
+async fn main() -> Result<(), ServerError> {
     env_logger::init();
 
     // TODO(MT): Setup signal handling
@@ -22,7 +25,7 @@ fn main() -> Result<(), ServerError> {
 
         let config_string_result = std::fs::read_to_string(path_to_config).map_err(|error| {
             error!("Error has occured while trying to read config file: {error:?}");
-            error
+            ServerError::ReadConfigError(error)
         })?;
 
         debug!("Successfully read config file, attempting to parse");
@@ -39,8 +42,12 @@ fn main() -> Result<(), ServerError> {
 
     info!("Successfully loaded server config");
 
-    info!("Starting the server");
-    // TODO(MT): Setup server
-
-    Ok(())
+    if args.server_config_file_editor_flag {
+        info!("Starting the config editor");
+        //TODO: Create config editor functionality
+        todo!()
+    } else {
+        let server = Server::new(server_config);
+        server.run_server().await
+    }
 }

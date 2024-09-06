@@ -1,0 +1,9 @@
+[package]
+name = "shared_types"
+version = "0.1.0"
+edition = "2021"
+authors.workspace = true
+
+[dependencies]
+base64 = "0.22.1"
+serde = { version = "1.0.209", features = ["derive"] }

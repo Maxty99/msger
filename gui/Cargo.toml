@@ -4,3 +4,16 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+iced = { version = "0.12.1", features = [
+    "debug",
+    "tokio",
+    "image",
+    "advanced",
+] }
+iced_aw = { version = "0.9.3", default-features = false, features = [
+    "card",
+    "modal",
+] }
+client = { path = "../client" }
+shared_types = { path = "../shared_types" }
+futures = "0.3.30"

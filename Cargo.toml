@@ -1,4 +1,4 @@
 [workspace]
 resolver = "2"
-members = ["client", "server", "gui"]
+members = ["client", "server", "gui", "shared_types"]
 package.authors = ["Maxim Tyuterev <maxtyuterev@gmail.com>"]

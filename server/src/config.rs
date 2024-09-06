@@ -1,4 +1,8 @@
-use std::{net::IpAddr, path::PathBuf, time::Duration};
+use std::{
+    net::{IpAddr, Ipv4Addr},
+    path::PathBuf,
+    time::Duration,
+};
 
 use clap::{Args, Parser};
 use serde::{Deserialize, Serialize};
@@ -11,6 +15,14 @@ const fn default_allow_files() -> bool {
 
 const fn default_message_timout() -> Duration {
     Duration::from_secs(5)
+}
+
+const fn default_ip() -> IpAddr {
+    IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))
+}
+
+const fn default_port() -> u16 {
+    2004
 }
 
 #[derive(Deserialize, Serialize, Args, Debug)]
@@ -40,6 +52,16 @@ pub(crate) struct ServerConfig {
     /// The time span within which a user may not send more than 5 messages, and if they do they will be timed out
     #[serde(default = "default_message_timout")]
     pub(crate) message_timeout: Duration,
+
+    #[arg(short = 'i', long = "ipaddr", default_value = "127.0.0.1")]
+    // Set the IP that the server will bind to
+    #[serde(default = "default_ip")]
+    pub(crate) ip_addr: IpAddr,
+
+    #[arg(short = 'p', long = "port", default_value = "2004")]
+    // Set the port that the server will bind to
+    #[serde(default = "default_port")]
+    pub(crate) port: u16,
 }
 
 #[derive(Parser, Debug)]
@@ -48,7 +70,16 @@ pub(crate) struct ClapArgConfig {
     #[command(flatten)]
     pub(crate) server_config: ServerConfig,
 
-    #[arg(short = 'c', long = "config")]
+    #[arg(short = 'c', long = "config", group = "config_file")]
     /// Optional path to a toml file used to configure the server, overrides any other command line args
     pub(crate) server_config_file: Option<PathBuf>,
+
+    #[arg(
+        short = 'e',
+        long = "editor",
+        requires = "config_file",
+        default_value = "false"
+    )]
+    /// Option to enter special config editor mode, must have provided a server config file path
+    pub(crate) server_config_file_editor_flag: bool,
 }
