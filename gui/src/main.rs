@@ -3,9 +3,12 @@ mod ws_client_subscription;
 use std::fs::File;
 use std::io::Read;
 
+use derivative::Derivative;
 use futures::channel::mpsc;
 
-use iced::widget::{button, column, container, row, scrollable, stack, text, text_input, Column};
+use iced::widget::{
+    button, column, combo_box, container, row, scrollable, stack, text, text_input, Column,
+};
 use iced::{application, Application, Element, Length, Settings, Subscription, Task, Theme};
 use iced_aw::Card;
 use shared_types::messages::{self, ClientMessage};
@@ -18,6 +21,7 @@ enum AppUpdateMessage {
     UpdateServerAddress(String),
     UpdateAppView(AppView),
     UpdateChatInput(String),
+    UpdateTheme(Theme),
     SendMessage(String),
     AttemptSendFile,
     AttemptToConnect,
@@ -33,8 +37,12 @@ enum AppView {
     Chat,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Derivative)]
+#[derivative(Default)]
 struct Messenger {
+    #[derivative(Default(value = "combo_box::State::new(Theme::ALL.to_vec())"))]
+    theme_combobox_state: combo_box::State<Theme>,
+    selected_theme: Option<Theme>,
     username: String,
     server_address: String,
     client_channel: Option<mpsc::Sender<ClientCommand>>,
@@ -132,6 +140,9 @@ fn update(app: &mut Messenger, message: AppUpdateMessage) -> iced::Task<AppUpdat
                 }
             }
         }
+        AppUpdateMessage::UpdateTheme(theme) => {
+            app.selected_theme = Some(theme);
+        }
     };
     Task::none()
 }
@@ -140,6 +151,15 @@ fn view(app: &Messenger) -> iced::Element<AppUpdateMessage> {
     let ui: Element<AppUpdateMessage> = match &app.client_channel {
         Some(_) => match app.app_view {
             AppView::Login => {
+                let theme_picker = combo_box(
+                    &app.theme_combobox_state,
+                    "Theme Selection",
+                    app.selected_theme.as_ref(),
+                    AppUpdateMessage::UpdateTheme,
+                )
+                .width(300)
+                .padding(5);
+
                 let name_input = text_input("username", &app.username)
                     .on_input(AppUpdateMessage::UpdateUsername)
                     .width(300)
@@ -158,10 +178,15 @@ fn view(app: &Messenger) -> iced::Element<AppUpdateMessage> {
                     .on_press_maybe(submit_message)
                     .padding(5);
 
-                column!(name_input, server_address_input, submit_button)
-                    .align_x(iced::Alignment::Center)
-                    .spacing(10)
-                    .into()
+                column!(
+                    theme_picker,
+                    name_input,
+                    server_address_input,
+                    submit_button
+                )
+                .align_x(iced::Alignment::Center)
+                .spacing(10)
+                .into()
             }
             AppView::Chat => {
                 let messages = app.messages.iter().fold(
@@ -246,7 +271,13 @@ fn subscription(_app: &Messenger) -> iced::Subscription<AppUpdateMessage> {
     Subscription::run(start_client)
 }
 
+fn theme(app: &Messenger) -> Theme {
+    app.selected_theme.clone().unwrap_or_default()
+}
+
 fn main() -> Result<(), iced::Error> {
-    let app = application(title, update, view).subscription(subscription);
+    let app = application(title, update, view)
+        .subscription(subscription)
+        .theme(theme);
     app.run()
 }

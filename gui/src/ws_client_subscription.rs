@@ -79,18 +79,18 @@ pub fn start_client() -> impl Stream<Item = AppUpdateMessage> {
                         // Can think of this as either getting a command from frontent or from server
                         futures::select! {
 
-                            // The server wants us to do something
-                            received = client.select_next_some() => {
-                                match received {
-                                    Ok(message) => {
-                                        let _ = output.send(AppUpdateMessage::MessageReceived(message)).await;
-                                    }
-                                    Err(err) => {
-                                        let _ = output
-                                        .send(AppUpdateMessage::SetError(err.to_string()))
-                                        .await;
+                        // The server wants us to do something
+                        received = client.select_next_some() => {
+                            match received {
+                                Ok(message) => {
+                                    let _ = output.send(AppUpdateMessage::MessageReceived(message)).await;
+                                }
+                                Err(err) => {
+                                    let _ = output
+                                    .send(AppUpdateMessage::SetError(err.to_string()))
+                                    .await;
 
-                                    client_state = ConnectionState::Idle;
+                                client_state = ConnectionState::Idle;
                                 }
                             }
                         }
