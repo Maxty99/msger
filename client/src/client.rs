@@ -2,6 +2,7 @@
 
 use std::pin::Pin;
 
+use base64::{prelude::BASE64_STANDARD, Engine};
 use futures::{stream::FusedStream, Sink, SinkExt, Stream, StreamExt};
 use shared_types::messages::ClientMessage;
 use tokio::net::TcpStream;
@@ -17,7 +18,11 @@ use crate::error::ClientError;
 
 pub type WSMessage = Message;
 
-pub async fn connect(username: &str, server_address: &str) -> Result<Client, ClientError> {
+pub async fn connect(
+    username: &str,
+    maybe_password: Option<String>,
+    server_address: &str,
+) -> Result<Client, ClientError> {
     let mut req = server_address
         .into_client_request()
         .map_err(|err| ClientError::CreateWSConnectionError(err))?;
@@ -25,16 +30,41 @@ pub async fn connect(username: &str, server_address: &str) -> Result<Client, Cli
     req.headers_mut()
         .append("username", HeaderValue::from_str(username)?);
 
-
-    let (ws_stream, _resp) = connect_async(req)
+    let (ws_stream, resp) = connect_async(req)
         .await
         .map_err(|err| ClientError::CreateWSConnectionError(err))?;
 
-    Ok(Client { inner: ws_stream })
+    for (ref header, value) in resp.headers() {
+        if let Ok(string_value) = value.to_str() {
+            if *header == shared_types::crypt::CRYPT_VALIDATION_KEY {
+                // Decrypt and compare value
+                // First layer: Base64
+                let encrypted_test_value = BASE64_STANDARD.decode(string_value)?;
+                // Second layer: simple_crypt (Contingent on Some(password))
+                let test_value = if let Some(ref password) = maybe_password {
+                    simple_crypt::decrypt(encrypted_test_value.as_slice(), password.as_bytes())
+                        .map_err(|_| ClientError::PasswordError)?
+                } else {
+                    // If there isnt then just compare base64 decoded val
+                    encrypted_test_value
+                };
+                if String::from_utf8_lossy(&test_value) != shared_types::crypt::CRYPT_VALIDATION_VAL
+                {
+                    return Err(ClientError::PasswordError);
+                }
+            }
+        }
+    }
+
+    Ok(Client {
+        inner: ws_stream,
+        maybe_password,
+    })
 }
 
 pub struct Client {
     inner: WebSocketStream<MaybeTlsStream<TcpStream>>,
+    maybe_password: Option<String>,
 }
 
 impl Stream for Client {
@@ -51,7 +81,14 @@ impl Stream for Client {
                 Some(Ok(Message::Text(message_string))) => {
                     let try_parsed_message = serde_json::from_str::<ClientMessage>(&message_string);
                     match try_parsed_message {
-                        Ok(parsed_message) => Some(Ok(parsed_message)),
+                        Ok(parsed_message) => {
+                            // Decrypt id password specified
+                            if let Some(ref password) = self.maybe_password {
+                                todo!()
+                            } else {
+                                Some(Ok(parsed_message))
+                            }
+                        }
                         Err(err) => Some(Err(ClientError::ParseIncomingMessageError(err))),
                     }
                 }

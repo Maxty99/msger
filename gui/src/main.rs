@@ -18,6 +18,7 @@ use ws_client_subscription::{start_client, ClientCommand};
 enum AppUpdateMessage {
     AppReady(mpsc::Sender<ClientCommand>),
     UpdateUsername(String),
+    UpdatePassword(String),
     UpdateServerAddress(String),
     UpdateAppView(AppView),
     UpdateChatInput(String),
@@ -44,6 +45,7 @@ struct Messenger {
     theme_combobox_state: combo_box::State<Theme>,
     selected_theme: Option<Theme>,
     username: String,
+    password: String,
     server_address: String,
     client_channel: Option<mpsc::Sender<ClientCommand>>,
     app_view: AppView,
@@ -62,6 +64,7 @@ fn update(app: &mut Messenger, message: AppUpdateMessage) -> iced::Task<AppUpdat
             if let Some(ref mut sender) = app.client_channel {
                 let try_send = sender.try_send(ClientCommand::Connect(
                     app.username.clone(),
+                    app.password.clone(),
                     app.server_address.clone(),
                 ));
                 match try_send {
@@ -143,6 +146,9 @@ fn update(app: &mut Messenger, message: AppUpdateMessage) -> iced::Task<AppUpdat
         AppUpdateMessage::UpdateTheme(theme) => {
             app.selected_theme = Some(theme);
         }
+        AppUpdateMessage::UpdatePassword(password) => {
+            app.password = password;
+        }
     };
     Task::none()
 }
@@ -164,6 +170,11 @@ fn view(app: &Messenger) -> iced::Element<AppUpdateMessage> {
                     .on_input(AppUpdateMessage::UpdateUsername)
                     .width(300)
                     .padding(5);
+                let password_input = text_input("Password... (Optional)", &app.password)
+                    .on_input(AppUpdateMessage::UpdatePassword)
+                    .secure(true)
+                    .width(300)
+                    .padding(5);
                 let server_address_input = text_input("wss://...", &app.server_address)
                     .on_input(AppUpdateMessage::UpdateServerAddress)
                     .width(300)
@@ -181,6 +192,7 @@ fn view(app: &Messenger) -> iced::Element<AppUpdateMessage> {
                 column!(
                     theme_picker,
                     name_input,
+                    password_input,
                     server_address_input,
                     submit_button
                 )

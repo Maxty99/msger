@@ -1,3 +1,4 @@
+use base64::{prelude::BASE64_STANDARD, Engine};
 use futures::{
     future::join_all,
     stream::{SplitSink, SplitStream},
@@ -11,6 +12,7 @@ use tokio::sync::Mutex;
 use tokio_tungstenite::{
     tungstenite::{
         handshake::server::{ErrorResponse, Request, Response},
+        http::HeaderValue,
         Message,
     },
     WebSocketStream,
@@ -125,8 +127,9 @@ impl Server {
 
         while let Ok((stream, client_socket_addr)) = listener.accept().await {
             let mut username = String::from("");
-            let try_ws_stream =
-                tokio_tungstenite::accept_hdr_async(stream, |req: &Request, response: Response| {
+            let try_ws_stream = tokio_tungstenite::accept_hdr_async(
+                stream,
+                |req: &Request, mut response: Response| {
                     debug!("Received a new ws handshake");
                     debug!("The request's path is: {}", req.uri().path());
                     debug!("The request's headers are:");
@@ -147,14 +150,35 @@ impl Server {
                         error!("Did not provide valid username");
                         Err(err_response)
                     } else {
+                        // Test val is encrypted, possible that encrypted bytes are not visible ascii
+                        let encrypted_test_value = if let Some(password) = config.auth.as_ref() {
+                            simple_crypt::encrypt(
+                                shared_types::crypt::CRYPT_VALIDATION_VAL.as_bytes(),
+                                password.as_bytes(),
+                            )
+                            .expect("Password to be valid") //TODO: What format should password be to be valid, check simple_crypt
+                        } else {
+                            shared_types::crypt::CRYPT_VALIDATION_VAL.into()
+                        };
+
+                        // Ensure bytes are visible ascii for use in header
+                        let base64_encrypted_test_value =
+                            BASE64_STANDARD.encode(encrypted_test_value);
+
+                        response.headers_mut().insert(
+                            shared_types::crypt::CRYPT_VALIDATION_KEY,
+                            HeaderValue::from_str(&base64_encrypted_test_value)
+                                .expect("value to be visible ascii (Base64 encoded)"),
+                        );
                         Ok(response)
                     }
-                })
-                .await
-                .map_err(|error| {
-                    error!("Error binding to socket address: {error:?}");
-                    ServerError::CreateWebsocketError(error)
-                });
+                },
+            )
+            .await
+            .map_err(|error| {
+                error!("Error binding to socket address: {error:?}");
+                ServerError::CreateWebsocketError(error)
+            });
 
             match try_ws_stream {
                 Ok(mut ws_stream) => {
