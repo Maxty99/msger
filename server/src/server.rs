@@ -65,7 +65,7 @@ impl Server {
                     serialized_message
                 }
                 Message::Binary(file) => {
-                    if let Some(Ok(Message::Text(file_name))) = stream.next().await {
+                    match stream.next().await { Some(Ok(Message::Text(file_name))) => {
                         let client_message = ClientMessage {
                             author: client_name,
                             contents: MessageContents::File {
@@ -76,12 +76,12 @@ impl Server {
 
                         let serialized_message = serde_json::to_string(&client_message);
                         serialized_message
-                    } else {
+                    } _ => {
                         //TODO: Add error type to match serde and the situation
                         //      where no file name is sent and make this varia-
                         //      ble use the library error type
                         todo!()
-                    }
+                    }}
                 }
                 Message::Close(_) => {
                     let client_message = ClientMessage {
