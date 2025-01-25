@@ -114,15 +114,31 @@ fn update(app: &mut Messenger, message: AppUpdateMessage) -> iced::Task<AppUpdat
         AppUpdateMessage::AttemptSendFile => {
             let maybe_file = rfd::FileDialog::new()
                 .pick_file()
-                .and_then(|path_buf| File::open(path_buf).ok())
-                .and_then(|mut file| {
+                // Make into (name, path) tuple
+                .and_then(|path_buf| {
+                    Some((
+                        // If not file indicates logic error with my code and RFD, need something stricter than '?' operator
+                        path_buf
+                            .file_name()
+                            .expect("file dialog to only give file")
+                            .to_string_lossy() // Not big deal if name is a bit mangled
+                            .into(),
+                        File::open(path_buf).ok()?,
+                    ))
+                })
+                // Make into (name, file contents) tuple
+                .and_then(|(filename, mut file)| {
                     let mut buf = vec![];
-                    file.read_to_end(&mut buf).map(|_| buf).ok()
+                    Some((filename, file.read_to_end(&mut buf).map(|_| buf).ok()?))
                 });
 
+            // Actually send file
             if let Some(ref mut sender) = app.client_channel {
-                if let Some(buf) = maybe_file {
-                    let try_send = sender.try_send(ClientCommand::SendFile(buf));
+                if let Some(file_name_and_contents) = maybe_file {
+                    let try_send = sender.try_send(ClientCommand::SendFile(
+                        file_name_and_contents.0, // Name
+                        file_name_and_contents.1, // Contents
+                    ));
                     match try_send {
                         Ok(_) => {}
                         Err(err) => {
@@ -173,7 +189,9 @@ fn view(app: &Messenger) -> iced::Element<AppUpdateMessage> {
                         let message_contents = match &message.contents {
                             messages::MessageContents::Text(txt) => text(txt),
                             // TODO: Add functionality to actually download file
-                            messages::MessageContents::File(_) => text("This is a file wow"),
+                            messages::MessageContents::File { name, contents } => {
+                                text("This is a file wow")
+                            }
                         };
                         let message_row = row!(message_author, message_contents)
                             .spacing(2)

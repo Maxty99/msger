@@ -23,7 +23,7 @@ enum ConnectionState {
 pub enum ClientCommand {
     Connect(String, String),
     SendMessage(String),
-    SendFile(Vec<u8>),
+    SendFile(String, Vec<u8>),
     Disconnect,
 }
 
@@ -117,13 +117,13 @@ pub fn start_client() -> impl Stream<Item = AppUpdateMessage> {
                                             },
                                         }
                                     },
-                                    ClientCommand::SendFile(file) => {
+                                    ClientCommand::SendFile(name, file) => {
                                         match client.send_file(file.clone()).await {
                                             Ok(_) => {
                                                 let _ = output
                                             .send(AppUpdateMessage::MessageReceived(ClientMessage {
                                                 author: "You".to_string(),
-                                                contents: shared_types::messages::MessageContents::File(file)
+                                                contents: shared_types::messages::MessageContents::File{ name, contents: file }
                                             }))
                                             .await;
                                             },

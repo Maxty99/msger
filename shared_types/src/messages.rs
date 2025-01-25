@@ -4,8 +4,12 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum MessageContents {
     Text(String),
-    #[serde(with = "base64_serialize")]
-    File(Vec<u8>),
+
+    File {
+        name: String,
+        #[serde(with = "base64_serialize")]
+        contents: Vec<u8>,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
