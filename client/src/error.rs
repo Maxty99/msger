@@ -22,4 +22,10 @@ pub enum ClientError {
 
     #[error("Could not form request to connect since the username is invalid")]
     UsernameError(#[from] tokio_tungstenite::tungstenite::http::header::InvalidHeaderValue),
+
+    #[error("Server sent beck malformed password test string")]
+    PasswordErrorBase64(#[from] base64::DecodeError),
+
+    #[error("Password decrypted test string did not match expected string")]
+    PasswordError,
 }

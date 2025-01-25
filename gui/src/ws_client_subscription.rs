@@ -21,7 +21,7 @@ enum ConnectionState {
 }
 
 pub enum ClientCommand {
-    Connect(String, String),
+    Connect(String, String, String),
     SendMessage(String),
     SendFile(String, Vec<u8>),
     Disconnect,
@@ -49,8 +49,14 @@ pub fn start_client() -> impl Stream<Item = AppUpdateMessage> {
                         let input = receiver.select_next_some().await;
 
                         match input {
-                            ClientCommand::Connect(username, server_address) => {
-                                let try_client = connect(&username, &server_address).await;
+                            ClientCommand::Connect(username, password, server_address) => {
+                                let maybe_password = if password.is_empty() {
+                                    None
+                                } else {
+                                    Some(password)
+                                };
+                                let try_client =
+                                    connect(&username, maybe_password, &server_address).await;
 
                                 //Try to connect and abort if not possible
                                 match try_client {
@@ -79,18 +85,18 @@ pub fn start_client() -> impl Stream<Item = AppUpdateMessage> {
                         // Can think of this as either getting a command from frontent or from server
                         futures::select! {
 
-                            // The server wants us to do something
-                            received = client.select_next_some() => {
-                                match received {
-                                    Ok(message) => {
-                                        let _ = output.send(AppUpdateMessage::MessageReceived(message)).await;
-                                    }
-                                    Err(err) => {
-                                        let _ = output
-                                        .send(AppUpdateMessage::SetError(err.to_string()))
-                                        .await;
+                        // The server wants us to do something
+                        received = client.select_next_some() => {
+                            match received {
+                                Ok(message) => {
+                                    let _ = output.send(AppUpdateMessage::MessageReceived(message)).await;
+                                }
+                                Err(err) => {
+                                    let _ = output
+                                    .send(AppUpdateMessage::SetError(err.to_string()))
+                                    .await;
 
-                                    client_state = ConnectionState::Idle;
+                                client_state = ConnectionState::Idle;
                                 }
                             }
                         }
