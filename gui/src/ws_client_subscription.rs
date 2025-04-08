@@ -1,7 +1,7 @@
-use client::client::{connect, Client};
+use client::client::{Client, connect};
 use futures::Stream;
 use iced::stream::channel;
-use iced::{futures, Subscription};
+use iced::{Subscription, futures};
 
 use futures::channel::mpsc::{self, Receiver};
 use futures::sink::SinkExt;

@@ -1,8 +1,8 @@
-use base64::{prelude::BASE64_STANDARD, Engine};
+use base64::{Engine, prelude::BASE64_STANDARD};
 use futures::{
+    SinkExt, StreamExt,
     future::join_all,
     stream::{SplitSink, SplitStream},
-    SinkExt, StreamExt,
 };
 use log::*;
 use shared_types::messages::{ClientMessage, MessageContents};
@@ -10,12 +10,12 @@ use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex;
 use tokio_tungstenite::{
+    WebSocketStream,
     tungstenite::{
+        Message,
         handshake::server::{ErrorResponse, Request, Response},
         http::HeaderValue,
-        Message,
     },
-    WebSocketStream,
 };
 
 use crate::{config::ServerConfig, error::ServerError};
@@ -48,7 +48,9 @@ impl Server {
         //TODO: Impl crypto https://docs.rs/simple_crypt/latest/simple_crypt/
         debug!("Polling {client_socket_addr} for messages");
         while let Some(Ok(message)) = stream.next().await {
-            debug!("New message: {message} \n\t from {client_socket_addr}, propogating to connected clients");
+            debug!(
+                "New message: {message} \n\t from {client_socket_addr}, propogating to connected clients"
+            );
             let mut connected_users_lock = connected_users.lock().await;
             let client_name = connected_users_lock
                 .get(&client_socket_addr)
@@ -65,23 +67,26 @@ impl Server {
                     serialized_message
                 }
                 Message::Binary(file) => {
-                    match stream.next().await { Some(Ok(Message::Text(file_name))) => {
-                        let client_message = ClientMessage {
-                            author: client_name,
-                            contents: MessageContents::File {
-                                name: String::from("test"),
-                                contents: file,
-                            },
-                        };
+                    match stream.next().await {
+                        Some(Ok(Message::Text(file_name))) => {
+                            let client_message = ClientMessage {
+                                author: client_name,
+                                contents: MessageContents::File {
+                                    name: String::from("test"),
+                                    contents: file,
+                                },
+                            };
 
-                        let serialized_message = serde_json::to_string(&client_message);
-                        serialized_message
-                    } _ => {
-                        //TODO: Add error type to match serde and the situation
-                        //      where no file name is sent and make this varia-
-                        //      ble use the library error type
-                        todo!()
-                    }}
+                            let serialized_message = serde_json::to_string(&client_message);
+                            serialized_message
+                        }
+                        _ => {
+                            //TODO: Add error type to match serde and the situation
+                            //      where no file name is sent and make this varia-
+                            //      ble use the library error type
+                            todo!()
+                        }
+                    }
                 }
                 Message::Close(_) => {
                     let client_message = ClientMessage {

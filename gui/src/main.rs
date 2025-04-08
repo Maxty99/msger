@@ -7,12 +7,12 @@ use derivative::Derivative;
 use futures::channel::mpsc;
 
 use iced::widget::{
-    button, column, combo_box, container, row, scrollable, stack, text, text_input, Column,
+    Column, button, column, combo_box, container, row, scrollable, stack, text, text_input,
 };
-use iced::{application, Application, Element, Length, Settings, Subscription, Task, Theme};
+use iced::{Application, Element, Length, Settings, Subscription, Task, Theme, application};
 use iced_aw::Card;
 use shared_types::messages::{self, ClientMessage};
-use ws_client_subscription::{start_client, ClientCommand};
+use ws_client_subscription::{ClientCommand, start_client};
 
 #[derive(Debug, Clone)]
 enum AppUpdateMessage {

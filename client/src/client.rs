@@ -2,16 +2,15 @@
 
 use std::pin::Pin;
 
-use base64::{prelude::BASE64_STANDARD, Engine};
-use futures::{stream::FusedStream, Sink, SinkExt, Stream, StreamExt};
+use base64::{Engine, prelude::BASE64_STANDARD};
+use futures::{Sink, SinkExt, Stream, StreamExt, stream::FusedStream};
 use shared_types::messages::ClientMessage;
 use tokio::net::TcpStream;
 use tokio_tungstenite::{
-    connect_async,
+    MaybeTlsStream, WebSocketStream, connect_async,
     tungstenite::{
-        client::IntoClientRequest, handshake::client::Request, http::HeaderValue, Message,
+        Message, client::IntoClientRequest, handshake::client::Request, http::HeaderValue,
     },
-    MaybeTlsStream, WebSocketStream,
 };
 
 use crate::error::ClientError;
