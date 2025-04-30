@@ -1,4 +1,4 @@
-use client::client::{Client, connect};
+use client::client::{ChatSession, connect};
 use futures::Stream;
 use iced::stream::channel;
 use iced::{Subscription, futures};
@@ -17,7 +17,7 @@ enum WorkerState {
 
 enum ConnectionState {
     Idle,
-    Connected(Client),
+    Connected(ChatSession),
 }
 
 pub enum ClientCommand {

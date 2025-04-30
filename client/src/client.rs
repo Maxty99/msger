@@ -21,7 +21,7 @@ pub async fn connect(
     username: &str,
     maybe_password: Option<String>,
     server_address: &str,
-) -> Result<Client, ClientError> {
+) -> Result<ChatSession, ClientError> {
     let mut req = server_address
         .into_client_request()
         .map_err(|err| ClientError::CreateWSConnectionError(err))?;
@@ -55,18 +55,18 @@ pub async fn connect(
         }
     }
 
-    Ok(Client {
+    Ok(ChatSession {
         inner: ws_stream,
         maybe_password,
     })
 }
 
-pub struct Client {
+pub struct ChatSession {
     inner: WebSocketStream<MaybeTlsStream<TcpStream>>,
     maybe_password: Option<String>,
 }
 
-impl Stream for Client {
+impl Stream for ChatSession {
     type Item = Result<ClientMessage, ClientError>;
 
     fn poll_next(
@@ -98,13 +98,13 @@ impl Stream for Client {
     }
 }
 
-impl FusedStream for Client {
+impl FusedStream for ChatSession {
     fn is_terminated(&self) -> bool {
         self.inner.is_terminated()
     }
 }
 
-impl Sink<WSMessage> for Client {
+impl Sink<WSMessage> for ChatSession {
     type Error = ClientError;
 
     fn poll_ready(
@@ -141,7 +141,7 @@ impl Sink<WSMessage> for Client {
     }
 }
 
-impl Client {
+impl ChatSession {
     pub async fn send_message<T: ToString + Send>(
         &mut self,
         message: T,
