@@ -5,7 +5,7 @@ use futures::{
     stream::{SplitSink, SplitStream},
 };
 use log::*;
-use shared_types::messages::{ClientMessage, MessageContents};
+use shared_types::messages::{MessageContents, ServerMessage};
 use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex;
@@ -54,12 +54,14 @@ impl Server {
             let mut connected_users_lock = connected_users.lock().await;
             let client_name = connected_users_lock
                 .get(&client_socket_addr)
-                .expect("Should not return None as map must be synced with active ws connections")
+                .expect(
+                    "Should not return None as hashmap must be synced with active ws connections",
+                )
                 .name
                 .clone();
             let try_serialized_message = match message {
                 Message::Text(text_message) => {
-                    let client_message = ClientMessage {
+                    let client_message = ServerMessage {
                         author: client_name,
                         contents: MessageContents::Text(text_message),
                     };
@@ -69,10 +71,10 @@ impl Server {
                 Message::Binary(file) => {
                     match stream.next().await {
                         Some(Ok(Message::Text(file_name))) => {
-                            let client_message = ClientMessage {
+                            let client_message = ServerMessage {
                                 author: client_name,
                                 contents: MessageContents::File {
-                                    name: String::from("test"),
+                                    name: file_name,
                                     contents: file,
                                 },
                             };
@@ -89,7 +91,7 @@ impl Server {
                     }
                 }
                 Message::Close(_) => {
-                    let client_message = ClientMessage {
+                    let client_message = ServerMessage {
                         author: String::from("Server"),
                         contents: MessageContents::Text(format!("{client_name} has disconnected")),
                     };
@@ -172,7 +174,8 @@ impl Server {
                                 shared_types::crypt::CRYPT_VALIDATION_VAL.as_bytes(),
                                 password.as_bytes(),
                             )
-                            .expect("Password to be valid") //TODO: What format should password be to be valid, check simple_crypt
+                            //TODO: What format should password be to be valid, check simple_crypt
+                            .expect("Password to be valid")
                         } else {
                             shared_types::crypt::CRYPT_VALIDATION_VAL.into()
                         };

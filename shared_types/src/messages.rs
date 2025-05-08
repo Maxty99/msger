@@ -13,7 +13,7 @@ pub enum MessageContents {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ClientMessage {
+pub struct ServerMessage {
     pub author: String,
     pub contents: MessageContents,
 }

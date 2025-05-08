@@ -20,6 +20,9 @@ pub enum ClientError {
     #[error("Could not send message to server")]
     SendMessageError(#[source] tokio_tungstenite::tungstenite::Error),
 
+    #[error("Could not properly send disconnect message to server")]
+    SendDisconnectError(#[source] tokio_tungstenite::tungstenite::Error),
+
     #[error("Could not form request to connect since the username is invalid")]
     UsernameError(#[from] tokio_tungstenite::tungstenite::http::header::InvalidHeaderValue),
 

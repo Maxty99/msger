@@ -1705,6 +1705,7 @@ dependencies = [
  "iced_aw",
  "rfd",
  "shared_types",
+ "tokio",
 ]
 
 [[package]]

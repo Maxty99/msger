@@ -1,10 +1,13 @@
 //TODO: CHange dyn to generics and make return type of connect use <impl Sink/Steam> and add another trait for convenience methods
 
-use std::pin::Pin;
+use std::{ops::Neg, pin::Pin};
 
 use base64::{Engine, prelude::BASE64_STANDARD};
-use futures::{Sink, SinkExt, Stream, StreamExt, stream::FusedStream};
-use shared_types::messages::ClientMessage;
+use futures::{
+    Sink, SinkExt, Stream, StreamExt,
+    stream::{FusedStream, SplitSink, SplitStream},
+};
+use shared_types::messages::ServerMessage;
 use tokio::net::TcpStream;
 use tokio_tungstenite::{
     MaybeTlsStream, WebSocketStream, connect_async,
@@ -18,16 +21,16 @@ use crate::error::ClientError;
 pub type WSMessage = Message;
 
 pub async fn connect(
-    username: &str,
+    username: String,
     maybe_password: Option<String>,
-    server_address: &str,
+    server_address: String,
 ) -> Result<ChatSession, ClientError> {
     let mut req = server_address
         .into_client_request()
         .map_err(|err| ClientError::CreateWSConnectionError(err))?;
 
     req.headers_mut()
-        .append("username", HeaderValue::from_str(username)?);
+        .append("username", HeaderValue::from_str(&username)?);
 
     let (ws_stream, resp) = connect_async(req)
         .await
@@ -57,17 +60,43 @@ pub async fn connect(
 
     Ok(ChatSession {
         inner: ws_stream,
-        maybe_password,
+        password: maybe_password.map(|some_pass| String::from(some_pass)),
     })
 }
 
+/// Struct that controls a sinlge chat session
+#[derive(Debug)]
 pub struct ChatSession {
     inner: WebSocketStream<MaybeTlsStream<TcpStream>>,
-    maybe_password: Option<String>,
+    password: Option<String>,
+}
+
+/// The allowed types of messages that can be sent to the server
+#[derive(Debug)]
+pub enum ClientMessage {
+    Text(String),
+    File(String, Vec<u8>),
+    // Treating disconnecting as a pseudo-message simplifies some logic
+    Disconnect,
+}
+
+impl ClientMessage {
+    #[inline(always)]
+    pub const fn disconnect_message() -> Self {
+        ClientMessage::Disconnect
+    }
+
+    pub fn text<S: ToString>(msg: S) -> Self {
+        Self::Text(msg.to_string())
+    }
+
+    pub fn file<S: ToString, B: Into<Vec<u8>>>(filename: S, file_as_bytes: B) -> Self {
+        Self::File(filename.to_string(), file_as_bytes.into())
+    }
 }
 
 impl Stream for ChatSession {
-    type Item = Result<ClientMessage, ClientError>;
+    type Item = Result<ServerMessage, ClientError>;
 
     fn poll_next(
         mut self: Pin<&mut Self>,
@@ -78,11 +107,11 @@ impl Stream for ChatSession {
             .map(|ws_message| match ws_message {
                 None => None,
                 Some(Ok(Message::Text(message_string))) => {
-                    let try_parsed_message = serde_json::from_str::<ClientMessage>(&message_string);
+                    let try_parsed_message = serde_json::from_str::<ServerMessage>(&message_string);
                     match try_parsed_message {
                         Ok(parsed_message) => {
                             // Decrypt id password specified
-                            if let Some(ref password) = self.maybe_password {
+                            if let Some(ref password) = self.password {
                                 todo!()
                             } else {
                                 Some(Ok(parsed_message))
@@ -104,7 +133,7 @@ impl FusedStream for ChatSession {
     }
 }
 
-impl Sink<WSMessage> for ChatSession {
+impl Sink<ClientMessage> for ChatSession {
     type Error = ClientError;
 
     fn poll_ready(
@@ -116,10 +145,29 @@ impl Sink<WSMessage> for ChatSession {
             .map_err(ClientError::SendMessageError)
     }
 
-    fn start_send(mut self: Pin<&mut Self>, item: WSMessage) -> Result<(), Self::Error> {
-        self.inner
-            .start_send_unpin(item)
-            .map_err(ClientError::SendMessageError)
+    fn start_send(mut self: Pin<&mut Self>, item: ClientMessage) -> Result<(), Self::Error> {
+        match item {
+            ClientMessage::Text(msg) => {
+                let converted_to_ws_message = WSMessage::text(msg);
+                self.inner
+                    .start_send_unpin(converted_to_ws_message)
+                    .map_err(ClientError::SendMessageError)
+            }
+            ClientMessage::File(filename, file_as_bytes) => {
+                let filename_to_ws_message = WSMessage::text(filename);
+                let file_to_ws_message = WSMessage::binary(file_as_bytes);
+                // Server expects filename to be sent immediately after the
+                // binary message
+                self.inner
+                    .start_send_unpin(file_to_ws_message)
+                    .and_then(|_| self.inner.start_send_unpin(filename_to_ws_message))
+                    .map_err(ClientError::SendMessageError)
+            }
+            ClientMessage::Disconnect => self
+                .inner
+                .start_send_unpin(WSMessage::Close(None))
+                .map_err(ClientError::SendDisconnectError),
+        }
     }
 
     fn poll_flush(
@@ -141,19 +189,65 @@ impl Sink<WSMessage> for ChatSession {
     }
 }
 
-impl ChatSession {
-    pub async fn send_message<T: ToString + Send>(
+/// Convenience type for the [Stream] (read) side of the split [ChatSession]
+pub type ChatSessionReader = SplitStream<ChatSession>;
+
+/// Convenience type for the [Sink] (Write) side of the split [ChatSession]
+pub type ChatSessionWriter = SplitSink<ChatSession, ClientMessage>;
+
+pub trait ChatWrite {
+    fn send_message<T: ToString + Send>(
         &mut self,
         message: T,
+    ) -> impl Future<Output = Result<(), ClientError>> + Send;
+    fn send_file<S: ToString + Send, B: Into<Vec<u8>> + Send>(
+        &mut self,
+        file_name: S,
+        file_as_bytes: B,
+    ) -> impl Future<Output = Result<(), ClientError>> + Send;
+    fn disconnect(&mut self) -> impl Future<Output = Result<(), ClientError>> + Send;
+}
+
+impl ChatWrite for ChatSessionWriter {
+    async fn send_message<T: ToString + Send>(&mut self, message: T) -> Result<(), ClientError> {
+        self.send(ClientMessage::Text(message.to_string())).await
+    }
+
+    async fn send_file<S: ToString + Send, B: Into<Vec<u8>> + Send>(
+        &mut self,
+        file_name: S,
+        file_as_bytes: B,
     ) -> Result<(), ClientError> {
-        self.send(Message::Text(message.to_string())).await
+        self.send(ClientMessage::File(
+            file_name.to_string(),
+            file_as_bytes.into(),
+        ))
+        .await
     }
 
-    pub async fn send_file<T: Into<Vec<u8>> + Send>(&mut self, file: T) -> Result<(), ClientError> {
-        self.send(Message::Binary(file.into())).await
+    async fn disconnect(&mut self) -> Result<(), ClientError> {
+        self.send(ClientMessage::Disconnect).await
+    }
+}
+
+impl ChatWrite for ChatSession {
+    async fn send_message<T: ToString + Send>(&mut self, message: T) -> Result<(), ClientError> {
+        self.send(ClientMessage::Text(message.to_string())).await
     }
 
-    pub async fn disconnect(&mut self) -> Result<(), ClientError> {
-        self.send(Message::Close(None)).await
+    async fn send_file<S: ToString + Send, B: Into<Vec<u8>> + Send>(
+        &mut self,
+        file_name: S,
+        file_as_bytes: B,
+    ) -> Result<(), ClientError> {
+        self.send(ClientMessage::File(
+            file_name.to_string(),
+            file_as_bytes.into(),
+        ))
+        .await
+    }
+
+    async fn disconnect(&mut self) -> Result<(), ClientError> {
+        self.send(ClientMessage::Disconnect).await
     }
 }
