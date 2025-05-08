@@ -1,6 +1,6 @@
 //TODO: CHange dyn to generics and make return type of connect use <impl Sink/Steam> and add another trait for convenience methods
 
-use std::{ops::Neg, pin::Pin};
+use std::pin::Pin;
 
 use base64::{Engine, prelude::BASE64_STANDARD};
 use futures::{
@@ -12,7 +12,7 @@ use tokio::net::TcpStream;
 use tokio_tungstenite::{
     MaybeTlsStream, WebSocketStream, connect_async,
     tungstenite::{
-        Message, client::IntoClientRequest, handshake::client::Request, http::HeaderValue,
+        Message, client::IntoClientRequest, http::HeaderValue,
     },
 };
 
