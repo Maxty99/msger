@@ -2,3 +2,11 @@
 resolver = "2"
 members = ["client", "server", "gui", "shared_types"]
 package.authors = ["Maxim Tyuterev <maxtyuterev@gmail.com>"]
+
+[profile.release]
+opt-level = 3
+debug = 0
+codegen-units = 1
+lto = true
+panic = "abort"
+strip = "symbols"
