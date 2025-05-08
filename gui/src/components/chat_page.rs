@@ -80,6 +80,8 @@ impl ChatPage {
         match message {
             ChatPageMessage::SendMessage(msg) => {
                 if let Some(ref mut writer_mutex) = self.chat_writer {
+                    self.chat_input.clear();
+
                     // Need to do this cloning to satisfy 'static bounds needed
                     let owned_writer_mutex = writer_mutex.clone(); // Cheap clone
                     let msg_clone = msg.clone(); // Probably cheap clone
@@ -179,7 +181,11 @@ impl ChatPage {
                 let _ = self.chat_writer.replace(new_writer);
             }
             ChatPageMessage::UpdateChatInput(new_chat_input) => self.chat_input = new_chat_input,
-            ChatPageMessage::ResetChatWriter => self.chat_writer = None,
+            ChatPageMessage::ResetChatWriter => {
+                self.chat_writer = None;
+                self.chat_messages.clear();
+                self.chat_input.clear();
+            }
         };
 
         Task::none()
