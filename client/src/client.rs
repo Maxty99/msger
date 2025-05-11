@@ -11,14 +11,10 @@ use shared_types::messages::ServerMessage;
 use tokio::net::TcpStream;
 use tokio_tungstenite::{
     MaybeTlsStream, WebSocketStream, connect_async,
-    tungstenite::{
-        Message, client::IntoClientRequest, http::HeaderValue,
-    },
+    tungstenite::{Message as WSMessage, client::IntoClientRequest, http::HeaderValue},
 };
 
 use crate::error::ClientError;
-
-pub type WSMessage = Message;
 
 pub async fn connect(
     username: String,
@@ -106,7 +102,7 @@ impl Stream for ChatSession {
             .poll_next_unpin(cx)
             .map(|ws_message| match ws_message {
                 None => None,
-                Some(Ok(Message::Text(message_string))) => {
+                Some(Ok(WSMessage::Text(message_string))) => {
                     let try_parsed_message = serde_json::from_str::<ServerMessage>(&message_string);
                     match try_parsed_message {
                         Ok(parsed_message) => {
