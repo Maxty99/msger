@@ -1,6 +1,6 @@
 use std::{fs::File, io::Read, sync::Arc};
 
-use client::client::{ChatSessionWriter, ChatWrite};
+use client::{ChatSessionWriter, ChatWrite};
 use futures::TryFutureExt;
 use iced::{
     Length, Task,

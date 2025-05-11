@@ -1,4 +1,4 @@
-use client::client::connect;
+use client::connect;
 use derivative::Derivative;
 use iced::{
     Length, Task, Theme,

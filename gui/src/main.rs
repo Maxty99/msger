@@ -3,7 +3,7 @@ mod components;
 
 use std::sync::Arc;
 
-use client::client::ChatSession;
+use client::ChatSession;
 use components::{
     ChatPage, ChatPageMessage, ErrorPopup, ErrorPopupMessage, LoginPage, LoginPageMessage,
 };
