@@ -36,9 +36,9 @@ pub(crate) enum ChatPageMessage {
     Disconnect,
 }
 
-impl Into<AppUpdateMessage> for ChatPageMessage {
-    fn into(self) -> AppUpdateMessage {
-        AppUpdateMessage::ChatPageMessage(self)
+impl From<ChatPageMessage> for AppUpdateMessage {
+    fn from(val: ChatPageMessage) -> Self {
+        AppUpdateMessage::ChatPageMessage(val)
     }
 }
 

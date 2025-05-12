@@ -19,9 +19,9 @@ pub(crate) enum ErrorPopupMessage {
     ToggleExpand,
 }
 
-impl Into<AppUpdateMessage> for ErrorPopupMessage {
-    fn into(self) -> AppUpdateMessage {
-        AppUpdateMessage::ErrorPopupMessage(self)
+impl From<ErrorPopupMessage> for AppUpdateMessage {
+    fn from(val: ErrorPopupMessage) -> Self {
+        AppUpdateMessage::ErrorPopupMessage(val)
     }
 }
 

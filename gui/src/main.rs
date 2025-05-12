@@ -48,7 +48,7 @@ fn update(app: &mut Messenger, message: AppUpdateMessage) -> Task<AppUpdateMessa
                 });
             let chat_worker_update_stream =
                 Task::stream(ChatPage::init_worker(username, chat_session_writer));
-            return Task::batch(vec![chat_session_read_task, chat_worker_update_stream]);
+            Task::batch(vec![chat_session_read_task, chat_worker_update_stream])
         }
 
         // Component Updaters

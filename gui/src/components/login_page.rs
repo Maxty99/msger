@@ -30,9 +30,9 @@ pub(crate) enum LoginPageMessage {
     UpdateTheme(Theme),
 }
 
-impl Into<AppUpdateMessage> for LoginPageMessage {
-    fn into(self) -> AppUpdateMessage {
-        AppUpdateMessage::LoginPageMessage(self)
+impl From<LoginPageMessage> for AppUpdateMessage {
+    fn from(val: LoginPageMessage) -> Self {
+        AppUpdateMessage::LoginPageMessage(val)
     }
 }
 
@@ -119,7 +119,7 @@ impl LoginPage {
                     connection_future,
                     |connection_result| match connection_result {
                         Ok((chat_session, username)) => {
-                            AppUpdateMessage::BeginChat(chat_session, username).into()
+                            AppUpdateMessage::BeginChat(chat_session, username)
                         }
                         Err(err) => ErrorPopupMessage::AddError(err.to_string()).into(),
                     },
@@ -127,9 +127,9 @@ impl LoginPage {
             }
 
             // Basic updaters
-            LoginPageMessage::UpdateUsername(new_username) => self.username = new_username.into(),
-            LoginPageMessage::UpdatePassword(new_password) => self.password = new_password.into(),
-            LoginPageMessage::UpdateServerAddress(new_addr) => self.server_addr = new_addr.into(),
+            LoginPageMessage::UpdateUsername(new_username) => self.username = new_username,
+            LoginPageMessage::UpdatePassword(new_password) => self.password = new_password,
+            LoginPageMessage::UpdateServerAddress(new_addr) => self.server_addr = new_addr,
             LoginPageMessage::UpdateTheme(new_theme) => self.selected_theme = new_theme,
         }
         Task::none()
