@@ -25,7 +25,7 @@ async fn main() -> Result<(), ServerError> {
 
         let config_string_result = std::fs::read_to_string(path_to_config).map_err(|error| {
             error!("Error has occured while trying to read config file: {error:?}");
-            ServerError::ReadConfigError(error)
+            ServerError::ReadConfig(error)
         })?;
 
         debug!("Successfully read config file, attempting to parse");

@@ -1,32 +1,45 @@
-use std::{fs::File, io::Read, sync::Arc};
-
-use client::{ChatSessionWriter, ChatWrite};
-use futures::TryFutureExt;
+mod chat_worker;
+use anyhow::{Context, Result, bail};
+use chat_worker::ChatSender;
+use client::ChatWrite;
+use futures::Stream;
 use iced::{
     Length, Task,
     widget::{button, column, row, scrollable, text, text_input},
 };
 use shared_types::messages::{MessageContents, ServerMessage};
-use tokio::sync::Mutex;
+use size::Size as PrettyFileSize;
+use std::{fs::File, io::Read};
 
 use crate::AppUpdateMessage;
+
+use super::ErrorPopupMessage;
+
+//TODO: Maybe make this adjustable?
+const MAXIMUM_FILE_SIZE_BYTES: PrettyFileSize = PrettyFileSize::from_const(1_073_741_824); // 1 GB
 
 #[derive(Debug, Default)]
 pub(crate) struct ChatPage {
     chat_messages: Vec<ServerMessage>,
     chat_input: String,
-    chat_writer: Option<Arc<Mutex<ChatSessionWriter>>>,
+    chat_sender: Option<ChatSender>,
 }
 
 #[derive(Debug, Clone)]
 pub(crate) enum ChatPageMessage {
-    NewChatWriter(Arc<Mutex<ChatSessionWriter>>),
-    ResetChatWriter,
+    ResetChatWorker,
+    WorkerReady(ChatSender),
     UpdateChatInput(String),
     SendMessage(String),
     AddMessageToHistory(ServerMessage),
     AttemptSendFile,
     Disconnect,
+}
+
+impl Into<AppUpdateMessage> for ChatPageMessage {
+    fn into(self) -> AppUpdateMessage {
+        AppUpdateMessage::ChatPageMessage(self)
+    }
 }
 
 impl ChatPage {
@@ -38,7 +51,7 @@ impl ChatPage {
                 let message_contents = match &message.contents {
                     MessageContents::Text(txt) => text(txt),
                     // TODO: Add functionality to actually download file
-                    MessageContents::File { name, contents } => text("This is a file wow"),
+                    MessageContents::File { name: _, contents: _ } => text("This is a file wow"),
                 };
                 let message_row = row!(message_author, message_contents)
                     .spacing(2)
@@ -76,41 +89,29 @@ impl ChatPage {
         column!(chat, controls).into()
     }
 
-    pub(crate) fn update(&mut self, message: ChatPageMessage) -> iced::Task<AppUpdateMessage> {
+    pub(crate) fn update(&mut self, message: ChatPageMessage) -> impl Into<Task<AppUpdateMessage>> {
         match message {
-            ChatPageMessage::SendMessage(msg) => {
-                if let Some(ref mut writer_mutex) = self.chat_writer {
-                    self.chat_input.clear();
-
-                    // Need to do this cloning to satisfy 'static bounds needed
-                    let owned_writer_mutex = writer_mutex.clone(); // Cheap clone
-                    let msg_clone = msg.clone(); // Probably cheap clone
-                    let sent_chat_message = ServerMessage {
-                        author: String::from("You"),
-                        contents: MessageContents::Text(msg_clone),
-                    };
-                    return Task::perform(
-                        async move {
-                            let mut writer = owned_writer_mutex.lock().await;
-                            writer.send_message(msg).map_ok(|_| sent_chat_message).await
+            ChatPageMessage::SendMessage(message_text) => {
+                if let Some(ref mut sender) = self.chat_sender {
+                    match sender.try_send(client::ClientMessage::text(message_text)) {
+                        Ok(_) => {
+                            self.chat_input.clear();
+                            return Task::none();
                         },
-                        move |disconnect_result| match disconnect_result {
-                            Ok(sent_msg) => AppUpdateMessage::ChatPageMessage(
-                                ChatPageMessage::AddMessageToHistory(sent_msg),
-                            ),
-                            Err(err) => AppUpdateMessage::AddError(err.to_string()),
-                        },
-                    );
+                        Err(err) => {
+                            return Task::done(ErrorPopupMessage::AddError(err.to_string()).into());
+                        }
+                    }
                 }
             }
             ChatPageMessage::AttemptSendFile => {
-                // TODO: I wonder if I can do this better. Currently if you select a big a** file
-                // you won't be able to store it in memory and probably lead to crash
-                let maybe_file: Option<(String, Vec<u8>)> = rfd::FileDialog::new()
-                    .pick_file()
+                let maybe_file = rfd::FileDialog::new().pick_file();
+
+                let process_file_result: Result<(String, Vec<u8>)> = maybe_file
+                    .context("File dialog did not return a ")
                     // Make into (name, path) tuple
                     .and_then(|path_buf| {
-                        Some((
+                        Ok((
                             // If not file indicates logic error with my code and RFD
                             // need something stricter than '?' operator so using expect
                             path_buf
@@ -118,73 +119,58 @@ impl ChatPage {
                                 .expect("file dialog to only give file")
                                 .to_string_lossy() // Not big deal if name is a bit mangled
                                 .into(),
-                            File::open(path_buf).ok()?,
+                            File::open(path_buf)?,
                         ))
                     })
                     // Make into (name, file contents) tuple
                     .and_then(|(filename, mut file)| {
-                        let mut buf = vec![];
-                        Some((filename, file.read_to_end(&mut buf).map(|_| buf).ok()?))
+                        
+                        let file_metadata = file
+                            .metadata()
+                            .context("Could not get file metadata to check for file size")?;
+                        // Need some sort of protection against overflowing memory
+                        // by accident by selecting a very large file
+                        let file_size = PrettyFileSize::from_bytes(file_metadata.len());
+                        if file_size <= MAXIMUM_FILE_SIZE_BYTES {
+                            let mut buf = vec![];
+                            let _ = file.read_to_end(&mut buf).context("Error while reading file")?;
+                            Ok((filename, buf))
+                        } else {
+                            bail!("Selected file was too large: {file_size} (Maximum: {MAXIMUM_FILE_SIZE_BYTES})");
+                        }
                     });
 
-                // Actually send file, same principle as with text message
-                if let Some(ref mut writer_mutex) = self.chat_writer {
-                    if let Some((file_name, file_contents)) = maybe_file {
-                        let owned_writer_mutex = writer_mutex.clone(); // Cheap clone
-                        let file_name_clone = file_name.clone(); // Cheap clone
-                        let file_contents_clone = file_contents.clone(); // Potentially dangerous clone
-                        let sent_message_contents = MessageContents::File {
-                            name: file_name_clone,
-                            contents: file_contents_clone,
-                        };
-                        let sent_chat_message = ServerMessage {
-                            author: String::from("You"),
-                            contents: sent_message_contents,
-                        };
-                        return Task::perform(
-                            async move {
-                                let mut writer = owned_writer_mutex.lock().await;
-                                writer
-                                    .send_file(file_name, file_contents)
-                                    .map_ok(|_| sent_chat_message)
-                                    .await
-                            },
-                            move |send_file_result| match send_file_result {
-                                Ok(sent_msg) => AppUpdateMessage::ChatPageMessage(
-                                    ChatPageMessage::AddMessageToHistory(sent_msg),
-                                ),
-                                Err(err) => AppUpdateMessage::AddError(err.to_string()),
-                            },
-                        );
+                if let Some(ref mut sender) = self.chat_sender {
+                    
+                    match process_file_result.and_then(|(filename, file_contents)| {
+                        sender.try_send(client::ClientMessage::file(filename, file_contents)).map_err(anyhow::Error::from)
+                    }) {
+                        Ok(_) => return Task::none(),
+                        Err(err) => return Task::done(ErrorPopupMessage::AddError(err.to_string()).into()),
                     }
                 }
             }
             ChatPageMessage::Disconnect => {
-                if let Some(ref mut writer_mutex) = self.chat_writer {
-                    let owned_writer_mutex = writer_mutex.clone(); // Cheap clone
-                    return Task::perform(
-                        async move {
-                            let mut writer = owned_writer_mutex.lock().await;
-                            writer.disconnect().await
-                        },
-                        |disconnect_result| match disconnect_result {
-                            Ok(_) => {
-                                AppUpdateMessage::ChatPageMessage(ChatPageMessage::ResetChatWriter)
-                            }
-                            Err(err) => AppUpdateMessage::AddError(err.to_string()),
-                        },
-                    );
+                if let Some(ref mut sender) = self.chat_sender {
+                    match sender.try_send(client::ClientMessage::disconnect_message()) {
+                        Ok(_) => return Task::none(),
+                        Err(err) => {
+                            return Task::done(ErrorPopupMessage::AddError(err.to_string()).into());
+                        }
+                    }
                 }
             }
+
+            // Simple Updaters
             ChatPageMessage::AddMessageToHistory(msg) => self.chat_messages.push(msg),
-            ChatPageMessage::NewChatWriter(new_writer) => {
-                let _ = self.chat_writer.replace(new_writer);
-            }
             ChatPageMessage::UpdateChatInput(new_chat_input) => self.chat_input = new_chat_input,
-            ChatPageMessage::ResetChatWriter => {
-                self.chat_writer = None;
+            ChatPageMessage::ResetChatWorker => {
+                self.chat_sender = None;
                 self.chat_messages.clear();
                 self.chat_input.clear();
+            }
+            ChatPageMessage::WorkerReady(chat_worker_sender) => {
+                self.chat_sender = Some(chat_worker_sender)
             }
         };
 
@@ -193,6 +179,13 @@ impl ChatPage {
 
     /// Convenience method to determine if user is in a chat
     pub(crate) fn is_in_chat(&self) -> bool {
-        self.chat_writer.is_some()
+        self.chat_sender.is_some()
+    }
+
+    pub(crate) fn init_worker(
+        username: String,
+        chat_session_writer: impl ChatWrite,
+    ) -> impl Stream<Item = AppUpdateMessage> {
+        chat_worker::start_chat_worker(chat_session_writer, username)
     }
 }

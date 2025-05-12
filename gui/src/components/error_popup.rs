@@ -19,6 +19,13 @@ pub(crate) enum ErrorPopupMessage {
     ToggleExpand,
 }
 
+impl Into<AppUpdateMessage> for ErrorPopupMessage {
+    fn into(self) -> AppUpdateMessage {
+        AppUpdateMessage::ErrorPopupMessage(self)
+    }
+}
+
+// TODO: Convert to anyhow maybe
 impl ErrorPopup {
     //TODO: Make this prettier
     pub(crate) fn view(&self) -> iced::Element<ErrorPopupMessage> {
@@ -62,7 +69,10 @@ impl ErrorPopup {
         }
     }
 
-    pub(crate) fn update(&mut self, message: ErrorPopupMessage) -> iced::Task<AppUpdateMessage> {
+    pub(crate) fn update(
+        &mut self,
+        message: ErrorPopupMessage,
+    ) -> impl Into<Task<AppUpdateMessage>> {
         match message {
             ErrorPopupMessage::AddError(new_err) => self.error_messages.push(new_err),
             ErrorPopupMessage::RemoveError(idx) => _ = self.error_messages.remove(idx),

@@ -1,11 +1,14 @@
 use client::connect;
 use derivative::Derivative;
+use futures::TryFutureExt;
 use iced::{
     Length, Task, Theme,
     widget::{button, column, combo_box, container, text, text_input},
 };
 
 use crate::AppUpdateMessage;
+
+use super::ErrorPopupMessage;
 
 #[derive(Debug, Derivative)]
 #[derivative(Default)]
@@ -25,6 +28,12 @@ pub(crate) enum LoginPageMessage {
     UpdatePassword(String),
     UpdateServerAddress(String),
     UpdateTheme(Theme),
+}
+
+impl Into<AppUpdateMessage> for LoginPageMessage {
+    fn into(self) -> AppUpdateMessage {
+        AppUpdateMessage::LoginPageMessage(self)
+    }
 }
 
 impl LoginPage {
@@ -79,7 +88,10 @@ impl LoginPage {
         .height(Length::Fill)
         .into()
     }
-    pub(crate) fn update(&mut self, message: LoginPageMessage) -> iced::Task<AppUpdateMessage> {
+    pub(crate) fn update(
+        &mut self,
+        message: LoginPageMessage,
+    ) -> impl Into<Task<AppUpdateMessage>> {
         match message {
             // Tell main app to initiate connection
             LoginPageMessage::AttemptToConnect => {
@@ -94,15 +106,22 @@ impl LoginPage {
                 };
 
                 let connection_future = connect(
-                    function_owned_user,
+                    // Double clone since I use it twice, here and
+                    // in the Ok variant that I send back to the main app
+                    // I can't keep track of the username otherwise
+                    function_owned_user.clone(),
                     function_owned_pass,
                     function_owned_addr,
-                );
+                )
+                .map_ok(|chat_session| (chat_session, function_owned_user));
+
                 return Task::perform(
                     connection_future,
                     |connection_result| match connection_result {
-                        Ok(chat_session) => AppUpdateMessage::BeginChat(chat_session),
-                        Err(err) => AppUpdateMessage::AddError(err.to_string()),
+                        Ok((chat_session, username)) => {
+                            AppUpdateMessage::BeginChat(chat_session, username).into()
+                        }
+                        Err(err) => ErrorPopupMessage::AddError(err.to_string()).into(),
                     },
                 );
             }

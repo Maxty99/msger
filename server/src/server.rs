@@ -65,16 +65,15 @@ impl Server {
                         author: client_name,
                         contents: MessageContents::Text(text_message),
                     };
-                    let serialized_message = serde_json::to_string(&client_message);
-                    serialized_message
+                    serde_json::to_string(&client_message)
                 }
                 Message::Binary(file) => {
                     match stream.next().await {
-                        Some(Ok(Message::Text(file_name))) => {
+                        Some(Ok(Message::Text(filename))) => {
                             let client_message = ServerMessage {
                                 author: client_name,
                                 contents: MessageContents::File {
-                                    name: file_name,
+                                    name: filename,
                                     contents: file,
                                 },
                             };
@@ -120,7 +119,7 @@ impl Server {
                         });
                     join_all(futures_batched).await;
                 }
-                Err(err) => {
+                Err(_err) => {
                     //TODO: Send message back to this client and say that we could not process the message
                     todo!()
                 }
@@ -139,7 +138,7 @@ impl Server {
             .await
             .map_err(|error| {
                 error!("Error binding to socket address: {error:?}");
-                ServerError::TCPBindError(error)
+                ServerError::TCPBind(error)
             })?;
         debug!("TCP server listening on: {server_socket_addr}");
 
@@ -196,7 +195,7 @@ impl Server {
             .await
             .map_err(|error| {
                 error!("Error binding to socket address: {error:?}");
-                ServerError::CreateWebsocketError(error)
+                ServerError::CreateWebsocket(error)
             });
 
             match try_ws_stream {
@@ -208,12 +207,12 @@ impl Server {
                         info!("New websocket connection denied: {client_socket_addr}");
                         debug!("User is already connected from this IP");
                         //TODO: Send announcemnt from the server
-                        ws_stream.close(None).await;
+                        let _ = ws_stream.close(None).await;
                     } else if config.banned_users.contains(&client_socket_addr.ip()) {
                         info!("New websocket connection denied: {client_socket_addr}");
                         debug!("User is banned");
                         //TODO: Send announcemnt from the server
-                        ws_stream.close(None).await;
+                        let _ = ws_stream.close(None).await;
                     } else {
                         // Splitting into read and write portions of the connections,
                         // move the readable to the spawned handler as it is not needed for

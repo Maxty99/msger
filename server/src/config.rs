@@ -25,6 +25,7 @@ const fn default_port() -> u16 {
     2004
 }
 
+//TODO: Add maximum file size server side option
 #[derive(Deserialize, Serialize, Args, Debug)]
 /// # Server Configuration
 /// This struct defines the possible configuration options of the server

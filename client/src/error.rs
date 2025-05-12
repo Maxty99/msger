@@ -3,32 +3,32 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 pub enum ClientError {
     #[error("Could not create a WS connection to the server: {0}")]
-    CreateWSConnectionError(#[source] tokio_tungstenite::tungstenite::Error),
+    CreateWSConnection(#[source] tokio_tungstenite::tungstenite::Error),
 
     #[error("Could not create the request needed to establish the WS connection")]
-    CreateWSRequestError(#[from] tokio_tungstenite::tungstenite::http::Error),
+    CreateWSRequest(#[from] tokio_tungstenite::tungstenite::http::Error),
 
     #[error("Could not receive message from server")]
-    ReceiveIncomingMessageError(#[source] tokio_tungstenite::tungstenite::Error),
+    ReceiveIncomingMessage(#[source] tokio_tungstenite::tungstenite::Error),
 
     #[error("Could not interpret message from server")]
-    ParseIncomingMessageError(#[from] serde_json::error::Error),
+    ParseIncomingMessage(#[from] serde_json::error::Error),
 
     #[error("Message from server was not the expected format")]
-    IncomingMessageFormatError,
+    IncomingMessageFormat,
 
     #[error("Could not send message to server")]
-    SendMessageError(#[source] tokio_tungstenite::tungstenite::Error),
+    SendMessage(#[source] tokio_tungstenite::tungstenite::Error),
 
     #[error("Could not properly send disconnect message to server")]
-    SendDisconnectError(#[source] tokio_tungstenite::tungstenite::Error),
+    SendDisconnect(#[source] tokio_tungstenite::tungstenite::Error),
 
     #[error("Could not form request to connect since the username is invalid")]
-    UsernameError(#[from] tokio_tungstenite::tungstenite::http::header::InvalidHeaderValue),
+    BadUsername(#[from] tokio_tungstenite::tungstenite::http::header::InvalidHeaderValue),
 
     #[error("Server sent beck malformed password test string")]
     PasswordErrorBase64(#[from] base64::DecodeError),
 
     #[error("Password decrypted test string did not match expected string")]
-    PasswordError,
+    BadPassword,
 }
