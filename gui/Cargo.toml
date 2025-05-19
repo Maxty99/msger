@@ -13,9 +13,9 @@ iced = { version = "0.13.1", features = [
 iced_aw = { version = "0.11.0", default-features = false, features = ["card"] }
 client = { path = "../client" }
 shared_types = { path = "../shared_types" }
-futures = "0.3.30"
-rfd = "0.15.0"
+futures = "0.3.31"
+rfd = "0.15.3"
 derivative = "2.2.0"
-tokio = { version = "1.40.0", features = ["full"] }
+tokio = { version = "1.45.0", features = ["full"] }
 anyhow = "1.0.98"
 size = "0.5.0"
