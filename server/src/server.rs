@@ -61,22 +61,13 @@ impl Server {
                 .clone();
             let try_serialized_message = match message {
                 Message::Text(text_message) => {
-                    let client_message = ServerMessage {
-                        author: client_name,
-                        contents: MessageContents::Text(text_message),
-                    };
+                    let client_message = ServerMessage::text(client_name, text_message);
                     serde_json::to_string(&client_message)
                 }
                 Message::Binary(file) => {
                     match stream.next().await {
                         Some(Ok(Message::Text(filename))) => {
-                            let client_message = ServerMessage {
-                                author: client_name,
-                                contents: MessageContents::File {
-                                    name: filename,
-                                    contents: file,
-                                },
-                            };
+                            let client_message = ServerMessage::file(client_name, filename, file);
 
                             let serialized_message = serde_json::to_string(&client_message);
                             serialized_message
