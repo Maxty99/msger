@@ -1,5 +1,8 @@
 #![windows_subsystem = "windows"]
 mod components;
+mod config;
+
+use std::collections::BTreeMap;
 
 use client::ChatSession;
 use components::{
@@ -8,6 +11,7 @@ use components::{
 
 use futures::StreamExt;
 use iced::widget::{container, stack};
+use iced::window::Id;
 use iced::{Element, Length, Subscription, Task, Theme, application};
 
 #[derive(Debug)]
@@ -16,6 +20,11 @@ enum AppUpdateMessage {
     ErrorPopupMessage(ErrorPopupMessage),
     ChatPageMessage(ChatPageMessage),
     BeginChat(ChatSession, String),
+}
+
+struct MessengerDaemon {
+    main_ui: LoginPage,
+    opened_windows: BTreeMap<Id, ChatPage>,
 }
 
 #[derive(Debug, Default)]

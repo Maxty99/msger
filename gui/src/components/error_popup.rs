@@ -1,10 +1,11 @@
+mod error_popup_entry;
+use crate::AppUpdateMessage;
+
 use iced::{
     Length, Task,
     widget::{button, column, container, row, stack, text},
 };
 use iced_aw::card;
-
-use crate::AppUpdateMessage;
 
 #[derive(Debug, Default)]
 pub(crate) struct ErrorPopup {
@@ -50,7 +51,7 @@ impl ErrorPopup {
                 .enumerate()
                 .fold(column!(), |col, (idx, err_message)| {
                     col.push(row![
-                        text(err_message),
+                        text(err_message.to_string()),
                         button(text("Clear")).on_press(ErrorPopupMessage::RemoveError(idx))
                     ])
                 })

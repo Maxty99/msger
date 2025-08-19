@@ -16,6 +16,7 @@ use tokio_tungstenite::{
 
 use crate::error::ClientError;
 
+// TODO: Add better typing for server_address https://docs.rs/http/1.3.1/http/uri/struct.Uri.html
 pub async fn connect(
     username: String,
     maybe_password: Option<String>,
